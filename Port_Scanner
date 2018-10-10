@@ -1,0 +1,182 @@
+#!/use/bin/env python
+#-*- coding: utf-8 -*-
+import datetime as datetime
+import nmap
+import time
+import re
+import csv
+import os
+from pip._vendor.distlib.compat import raw_input
+import datetime
+import email
+import smtplib
+import os
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+
+ip = ''
+outpath= 'ip_handle.txt'
+inpath = 'ip_raw.txt'
+
+class MyEmail:
+    def __init__(self):
+        self.user = None
+        self.passwd = None
+        self.to_list = []
+        self.cc_list = []
+        self.tag = None
+        self.doc = None
+
+
+    def send(self):
+        '''
+        发送邮件
+        '''
+        try:
+            server = smtplib.SMTP_SSL("smtp.exmail.qq.com",port=465)
+            server.login(self.user,self.passwd)
+            server.sendmail("<%s>"%self.user, self.to_list + self.cc_list, self.get_attach())
+            server.close()
+            print("send email successful")
+        except Exception as e:
+            print("send email failed")
+    def get_attach(self):
+        '''
+        构造邮件内容
+        '''
+        attach = MIMEMultipart()
+        #添加邮件内容
+       	txt = MIMEText("今日调查报告")
+        attach.attach(txt)
+        if self.tag is not None:
+            #主题,最上面的一行
+            attach["Subject"] = self.tag
+        if self.user is not None:
+            #显示在发件人
+            attach["From"] = self.user
+        if self.to_list:
+            #收件人列表
+            attach["To"] = ";".join(self.to_list)
+        if self.cc_list:
+            #抄送列表
+            attach["Cc"] = ";".join(self.cc_list)
+        if self.doc:
+            #估计任何文件都可以用base64，比如rar等
+            #文件名汉字用gbk编码代替
+            #name = os.path.basename(self.doc).encode("gbk")
+            f = open(self.doc,"rb")
+            doc = MIMEText(f.read(), "base64", "gb2312")
+            doc["Content-Type"] = 'application/octet-stream'
+            doc["Content-Disposition"] = 'attachment; filename="result.csv"'
+            attach.attach(doc)
+            f.close()
+
+        return attach.as_string()
+
+
+
+#定义扫描函数
+def Scanner(outpath):
+    os.popen(r'masscan -p1-65535 --rate=15000 -iL '+outpath+ '> portoutput.txt')
+
+#def Scanner(ip='127.0.0.1',port='22-443',args='-sV -Pn',result_file='result.txt'):
+#   nm = nmap.PortScanner()
+#   nm.scan(ip,port,args)
+#   f = open(result_file, 'a+')
+#   #print('ip,' + 'Port,' +'State,' + 'Service', file=f)
+#   for host in nm.all_hosts():
+#       #print('------------------------',file=f)
+#       #print('Host  : %s (%s)' %(ip,nm[ip].hostname()),file=f)
+#       #print('State : %s' %nm[ip].state(),file=f)
+#       for proto in nm[ip].all_protocols():
+#           #print('Protocols : %s' %proto,file=f)
+#           lport = sorted(nm[host][proto].keys())
+
+#           for port in lport:
+#               print(ip+','+str(port)+','+nm[ip][proto][port]['state']+','+nm[ip][proto][port]['name'],file=f)
+#   f.close()
+#处理结果
+def ResultBuilder(file = 'portoutput.txt'):
+    file = 'portoutput.txt'
+    output = 'result.csv'
+    fo = open(output, 'w+')
+    print('ip,port', file=fo)
+    with open(file) as f:
+        line = f.readline()
+        while line:
+            # print(line)
+            result = re.findall(r"[0-9]+/tcp on \b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b", line)
+            print(result)
+            # for a in result:
+            # ips.append(a)
+            result[0] = result[0].replace('on', ',')
+            result[0] = result[0].replace('/tcp', '')
+            Handle = result[0].split(',')
+            print(Handle[1] + ',' + Handle[0], file=fo)
+            line = f.readline()
+            # print(ips)
+    fo.close()
+#读取ip列表
+def IpReader(path):
+    with open(path) as file_object:
+        type = os.path.splitext(path)[-1]
+        if type == '.txt':
+            content = file_object.read()
+            result = re.findall(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b", content)
+            ips = []
+            for a in result:
+                if a not in ips:
+                    ips.append(a)
+            print(ips)
+            return ips
+        if type == '.csv':
+            reader = csv.reader(file_object)
+            row = [row[5] for row in reader]
+            del(row[0])
+            ips = []
+            for a in row:
+                if a not in ips:
+                    ips.append(a)
+    return ips
+
+if __name__ == '__main__':
+    #inpath = raw_input('请输入ip集合文件（.txt/.csv）:\n例如：/media/eddie/OS/Work/PycharmProjects/learning/Port_Scanner/ip.txt\n:')
+    #outpath= raw_input('请输入报告文件.txt:')
+    ips=IpReader(inpath)
+    f = open(outpath,'w+')
+    #print('ip,' + 'Port', file=f)
+    #f.close()
+    for ip in ips :
+        print(ip,file=f)
+    #print('[!]Report Complete')
+    f.close()
+    Scanner(outpath)
+    p = os.popen('ps -ef | grep masscan | wc -l')
+    a = p.read()
+    a = re.findall(r'\d',a)
+    print(a[0])
+    while a[0] != '2':
+        print('waiting')
+        time.sleep(10)
+        p = os.popen('ps -ef | grep masscan | wc -l')
+        a = p.read()
+        a = re.findall(r'\d', a)
+    ResultBuilder()
+    print('[!]Scanning Complete')
+    my = MyEmail()
+    my.user = ""
+    my.passwd = ""
+    my.to_list = ["eddie.du@shein.com", ]
+    my.cc_list = []
+    localtime = time.strftime('%m-%d',time.localtime())
+    my.tag = localtime+'端口扫描报告'
+    now_time = datetime.datetime.now()
+    yes_time = now_time + datetime.timedelta(days=-1)
+    yes_time_nyr = yes_time.strftime('%Y-%m-%d')
+    my.doc ='result.csv'
+    my.send()
+        
+
+#By Eddie.Du
+
