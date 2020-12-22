@@ -167,7 +167,7 @@ if __name__ == '__main__':
     my = MyEmail()
     my.user = ""
     my.passwd = ""
-    my.to_list = ["eddie.du@shein.com", ]
+    my.to_list = ["eddie.du@th.com", ]
     my.cc_list = []
     localtime = time.strftime('%m-%d',time.localtime())
     my.tag = localtime+'端口扫描报告'
